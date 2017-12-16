@@ -28,30 +28,33 @@
        (map name)
        (into #{})))
 
-(defn- light-listing-panel [chat-id]
-  (let [devices-list (hue/get-lights hue/hue)]
-    (api/send-text (config :telegram-token) chat-id
-                   {:reply_markup (json/encode
-                                   {:keyboard
-                                    (partition-all elements-in-keyboard-row
-                                                   (map #(format "%s: %s%s"
-                                                                 (name (first %))
-                                                                 (:name (second %))
-                                                                 (if (not (-> (second %)
-                                                                              :state
-                                                                              :reachable))
-                                                                   " - ❌"
-                                                                   " - 💡"))
-                                                        devices-list))})}
-                   "ok")))
+(defn keyboard-reply [keyboard text chat-id]
+  (api/send-text (config :telegram-token)
+                 chat-id
+                 {:reply_markup (json/encode {:keyboard keyboard})} text))
 
-(defn- light-control-panel [chat-id]
-  (api/send-text (config :telegram-token) chat-id
-                 {:reply_markup (json/encode
-                                 {:keyboard
-                                  [["🌅 on" "🌃 off"]
-                                   ["🔅" "1" "2" "3" "4" "5" "🔆"]
-                                   ["🔙"]]})} "ok"))
+(defn light-listing-panel [chat-id]
+  (let [devices-list (hue/get-lights hue/hue)]
+    (keyboard-reply
+     (partition-all
+      elements-in-keyboard-row
+      (map (fn [[lamp-id lamp-description]]
+             (format "%s: %s%s"
+                     (name lamp-id)
+                     (:name lamp-description)
+                     (if (not (-> lamp-description
+                                  :state
+                                  :reachable))
+                       " - ❌"
+                       " - 💡")))
+           devices-list))
+     "ok" chat-id)))
+
+(defn light-control-panel [chat-id]
+  (keyboard-reply
+   [["🌅 on" "🌃 off"]
+    ["🔅" "1" "2" "3" "4" "5" "🔆"]
+    ["🔙"]] "ok" chat-id))
 
 (defn message-dispatcher [message]
   (let [chat-id (-> message :message :chat :id)
@@ -80,8 +83,8 @@
              #(assoc-in % [chat-id :last-button] nil))
       (light-listing-panel chat-id))))
 
-(defn handle-generic-command [[chat-id command]]
-  (log/infof "trying to handle command: %s" command)
+(defn handle-generic-command [chat-id command]
+  (log/debugf "got command from user: %s" command)
   (if-let [lamp-id (get-lamp-id-from-button (:last-button (@user-context chat-id)))]
     (handle-device-command lamp-id chat-id command)
     (cond
@@ -99,11 +102,12 @@
 (mount/defstate bot
   :start (do
            (a/go-loop []
-             (let [command (a/<! message-buffer)]
+             (let [[chat-id command] (a/<! message-buffer)]
                (try
-                 (handle-command command)
+                 (log/infof "%s: %s" chat-id command)
+                 (handle-generic-command chat-id command)
                  (catch Exception e
                    (log/errorf "unable to process %s: %s" command e))))
              (recur))
            (start-polling (config :telegram-token)))
-  :stop (polling/stop telegram))
+  :stop (polling/stop bot))
