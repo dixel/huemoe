@@ -1,60 +1,43 @@
 (ns huemoe.telegram
   (:require [clj-http.client :as http]
             [taoensso.timbre :as log]
+            [morse.api :as api]
             [clojure.core.async :as a]))
 
-(def base-url "https://api.telegram.org/bot")
-
 (defn new-offset
-  "Returns new offset for Telegram updates"
+  "Returns new offset for Telegram updates; from https://github.com/Otann/morse/blob/master/src/morse/polling.clj"
   [updates default]
   (if (seq updates)
     (-> updates last :update_id inc)
     default))
 
-(defn get-updates
-  "Receive updates from Bot via long-polling endpoint"
-  [token {:keys [limit offset timeout]}]
-  (let [url      (str base-url token "/getUpdates")
-        query    {:timeout (or timeout 1)
-                  :offset  (or offset 0)
-                  :limit   (or limit 100)}]
-    (try
-      (or (->
-          (http/get url {:as :json
-                         :query-params query})
-          :body
-          :result)
-          ::error)
-      (catch Exception e
-        (do
-          (log/errorf "Failed to get updates: %s" e)
-          ::error)))))
-
-(defn send-text
-  "Sends message to the chat"
-  ([token chat-id text] (send-text token chat-id {} text))
-  ([token chat-id options text]
-   (let [url  (str base-url token "/sendMessage")
-         body (into {:chat_id chat-id :text text} options)
-         resp (http/post url {:content-type :json
-                              :as           :json
-                              :form-params  body})]
-     (-> resp :body))))
-
 (defn start
-  [token opts]
-  (let [updates (a/chan)
-        timeout (or (:timeout opts) 1000)]
-    (a/go-loop [offset 0]
-      (let [response (a/thread (get-updates token (merge opts {:offset offset})))
-            data (a/<! response)]
-        (case data
-          ::error
-          (do (log/warn "Got error from Telegram API, retrying in" timeout "ms")
-              (a/<! (a/timeout timeout))
-              (recur offset))
-          (do
-            (doseq [upd data] (when upd (a/>! updates upd)))
-            (recur (new-offset data offset))))))
-    updates))
+  "Modified polling from https://github.com/Otann/morse/blob/master/src/morse/polling.clj"
+  ([token] (start token {}))
+  ([token opts]
+   (let [updates (a/chan)
+         runner (a/chan)
+         timeout (or (:timeout opts) 5000)]
+     (a/go-loop [offset 0]
+       (let [response (a/thread
+                        (try
+                          (api/get-updates token (merge opts {:offset offset}))
+                          (catch Exception e
+                            (log/errorf "exception while trying to get updates: %s" e)
+                            ::error)))
+             [data _] (a/alts! [response runner])]
+         (case data
+           :close (log/info "stopping telegram polling process...")
+           nil (log/error "got unexpected nil as a response")
+           ::error
+           (do (log/warn "Got error from Telegram API, retrying in" timeout "ms")
+               (a/<! (a/timeout timeout))
+               (recur offset))
+           (do
+             (doseq [upd data] (when upd (a/>! updates upd)))
+             (recur (new-offset data offset))))))
+     {:updates updates
+      :runner runner})))
+
+(defn stop [{:keys [runner]} polling-state]
+  (a/>!! runner :close))
