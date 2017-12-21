@@ -1,0 +1,4 @@
+{:hue-host "111.11.11.11"
+ :hue-token "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+ :telegram-user-whitelist #{"xxxxx" "xxxxxx" "xxxxxx"}
+ :telegram-token "000000000:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}
