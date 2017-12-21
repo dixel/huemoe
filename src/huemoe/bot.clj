@@ -2,8 +2,8 @@
   (:require [mount.core :as mount]
             [huemoe.config :refer [config]]
             [huemoe.hue :as hue]
+            [huemoe.telegram :as telegram]
             [clojure.core.async :as a]
-            [morse.polling :as polling]
             [morse.api :as api]
             [cheshire.core :as json]
             [taoensso.timbre :as log]
@@ -29,7 +29,7 @@
        (into #{})))
 
 (defn keyboard-reply [keyboard text chat-id]
-  (api/send-text (config :telegram-token)
+  (telegram/send-text (config :telegram-token)
                  chat-id
                  {:reply_markup (json/encode {:keyboard keyboard})} text))
 
@@ -56,16 +56,8 @@
     ["🔅" "1" "2" "3" "4" "5" "🔆"]
     ["🔙"]] "ok" chat-id))
 
-(defn message-dispatcher [message]
-  (let [chat-id (-> message :message :chat :id)
-        text (-> message :message :text)
-        user (-> message :message :from :username)]
-    (log/debugf "got message: %s" message)
-    (when ((config :telegram-user-whitelist) user)
-      (a/go (a/>! message-buffer [chat-id text])))))
-
 (defn start-polling [token]
-  (polling/start token message-dispatcher))
+  (telegram/start token {}))
 
 (defn handle-device-command [lamp-id chat-id command]
   (case command
@@ -99,15 +91,24 @@
                           #(assoc-in % [chat-id :last-button] nil))
                    (light-listing-panel chat-id)))))
 
+(defn message-dispatcher [message]
+  (let [chat-id (-> message :message :chat :id)
+        text (-> message :message :text)
+        user (-> message :message :from :username)]
+    (log/debugf "got message: %s" message)
+    (when ((config :telegram-user-whitelist) user)
+      (handle-generic-command chat-id text))))
+
+
 (mount/defstate bot
-  :start (do
+  :start (let [updates (start-polling (config :telegram-token))]
            (a/go-loop []
-             (let [[chat-id command] (a/<! message-buffer)]
+             (if-let [message (a/<! updates)]
                (try
-                 (log/infof "%s: %s" chat-id command)
-                 (handle-generic-command chat-id command)
+                 (log/infof "message: %s" message)
+                 (message-dispatcher message)
                  (catch Exception e
-                   (log/errorf "unable to process %s: %s" command e))))
+                   (log/errorf "unable to process %s: %s" message e))))
              (recur))
-           (start-polling (config :telegram-token)))
-  :stop (polling/stop bot))
+           updates)
+  :stop (a/close! bot))
