@@ -24,12 +24,12 @@
                           (api/get-updates token (merge opts {:offset offset}))
                           (catch Exception e
                             (log/errorf "exception while trying to get updates: %s" e)
-                            ::error)))
+                            ::api/error)))
              [data _] (a/alts! [response runner])]
          (case data
            :close (log/info "stopping telegram polling process...")
            nil (log/error "got unexpected nil as a response")
-           ::error
+           ::api/error
            (do (log/warn "Got error from Telegram API, retrying in" timeout "ms")
                (a/<! (a/timeout timeout))
                (recur offset))
