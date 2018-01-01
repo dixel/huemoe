@@ -15,8 +15,8 @@
 (defn get-user-token [state username device]
   (let [response
         (-> (http/post (state :base-url) {:body
-                                (-> {:devicetype (str username ":" device)}
-                                    (json/encode))})
+                                          (-> {:devicetype (str username ":" device)}
+                                              (json/encode))})
             :body
             (json/decode true))]
     (case (-> response first :error :type)
@@ -29,10 +29,11 @@
       :body
       (json/decode true)))
 
-(defn set-light-state [state id light-state brightness]
+(defn set-light-state [state id light-state brightness & opts]
   (-> (format "%s/%s/lights/%s/state" (state :base-url) (state :token) id)
-      (http/put {:body (json/encode {:on light-state
-                                     :bri brightness})})
+      (http/put {:body (json/encode (merge (into {} opts)
+                                           {:on light-state
+                                            :bri brightness}))})
       :body
       (json/decode true)))
 
@@ -55,6 +56,7 @@
                      (let [new-bri (- (:bri current-lamp-state) brightness-step)]
                        (if (< new-bri min-brightness)
                          min-brightness
+
                          new-bri)))))
 
 (mount/defstate hue

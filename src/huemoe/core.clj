@@ -3,6 +3,7 @@
   (:require [cheshire.core :as json]
             [clj-http.client :as http]
             [huemoe.bot :as bot]
+            [huemoe.nrepl :as nrepl]
             [mount.core :as mount]))
 
 (defn -main [& args]

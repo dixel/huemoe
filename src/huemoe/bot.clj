@@ -37,6 +37,7 @@
   (when button
     (first (str/split button #":"))))
 
+
 (defn get-active-device-ids []
   (->> (hue/get-lights hue/hue)
        (filter #(-> % second :state :reachable))
@@ -128,6 +129,4 @@
                    (log/errorf "unable to process %s: %s" message e))))
              (recur))
            polling-state)
-  :stop (do
-          (log/info bot)
-          (a/>!! (:runner bot) :close)))
+  :stop (a/>!! (:runner bot) :close))
