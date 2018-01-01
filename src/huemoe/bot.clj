@@ -28,7 +28,13 @@
    "5" :brightness-5
    "🔙" :back-menu
    "❌" :lamp-active
-   "💡" :lamp-inactive})
+   "💡" :lamp-inactive
+   "❤️" :red-heart
+   "💛" :yellow-heart
+   "🧡" :orange-heart
+   "💜" :purple-heart
+   "💙" :blue-heart
+   "💚" :green-heart})
 
 (def command->button
   (map-invert button->command))
