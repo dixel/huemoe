@@ -19,6 +19,7 @@
 (def button->command
   {"🌅 on" :lamp-on
    "🌃 off" :lamp-off
+   "🌃 all off" :all-off
    "🔅" :brightness-dec
    "🔆" :brightness-inc
    "1" :brightness-1
@@ -31,10 +32,13 @@
    "💡" :lamp-inactive
    "❤️" :red-heart
    "💛" :yellow-heart
-   "🧡" :orange-heart
    "💜" :purple-heart
    "💙" :blue-heart
-   "💚" :green-heart})
+   "💚" :green-heart
+   "🔥" :flame
+   "💧" :droplet
+   "❄️" :snowflake
+   })
 
 (def command->button
   (map-invert button->command))
@@ -43,13 +47,16 @@
   (when button
     (first (str/split button #":"))))
 
-
 (defn get-active-device-ids []
   (->> (hue/get-lights hue/hue)
        (filter #(-> % second :state :reachable))
        (map first)
        (map name)
        (into #{})))
+
+(defn is-color-lamp? [lamp-id]
+  (= (:type ((hue/get-lights hue/hue) (keyword lamp-id)))
+     "Extended color light"))
 
 (defn keyboard-reply [keyboard text chat-id]
   (api/send-text (config :telegram-token)
@@ -59,32 +66,48 @@
 
 (defn light-listing-panel [chat-id]
   (let [devices-list (hue/get-lights hue/hue)
-        {:keys [lamp-active lamp-inactive]} command->button]
+        {:keys [lamp-active lamp-inactive all-off]} command->button]
     (keyboard-reply
-     (partition-all
-      elements-in-keyboard-row
-      (map (fn [[lamp-id lamp-description]]
-             (format "%s: %s - %s"
-                     (name lamp-id)
-                     (:name lamp-description)
-                     (if (not (-> lamp-description
-                                  :state
-                                  :reachable))
-                       lamp-active
-                       lamp-inactive)))
-           devices-list))
+     (concat
+      (partition-all
+       elements-in-keyboard-row
+       (map (fn [[lamp-id lamp-description]]
+              (format "%s: %s - %s"
+                      (name lamp-id)
+                      (:name lamp-description)
+                      (if (not (-> lamp-description
+                                   :state
+                                   :reachable))
+                        lamp-active
+                        lamp-inactive)))
+            devices-list)) [[all-off]])
      "`.:hue control:.`" chat-id)))
 
-(defn light-control-panel [chat-id]
+(defn light-control-panel [chat-id colorful?]
   (let [{:keys [lamp-on lamp-off
                 brightness-dec brightness-inc
                 brightness-1 brightness-2
                 brightness-3 brightness-4
-                brightness-5 back-menu]} command->button]
+                brightness-5 back-menu
+                red-heart green-heart blue-heart
+                yellow-heart purple-heart
+                flame snowflake
+                all-off
+                droplet]} command->button
+        keyboard [[lamp-on lamp-off]
+                  [brightness-dec brightness-1
+                   brightness-2 brightness-3
+                   brightness-4 brightness-5 brightness-inc]]]
     (keyboard-reply
-     [[lamp-on lamp-off]
-      [brightness-dec brightness-1 brightness-2 brightness-3 brightness-4 brightness-5 brightness-inc]
-      [back-menu]] "`.:dimmed lamp control:.`" chat-id)))
+     (let [kb
+           (if colorful?
+             (-> keyboard
+                 (conj [snowflake droplet flame])
+                 (conj [red-heart yellow-heart green-heart
+                        blue-heart purple-heart]))
+             keyboard)]
+       (conj kb [back-menu]))
+     "`.:dimmed lamp control:.`" chat-id)))
 
 (defn handle-device-command [lamp-id chat-id button]
   (case (button->command button)
@@ -97,21 +120,35 @@
     :brightness-3 (hue/set-light-state hue/hue lamp-id true (* 10 hue/brightness-step))
     :brightness-4 (hue/set-light-state hue/hue lamp-id true (* 15 hue/brightness-step))
     :brightness-5 (hue/set-light-state hue/hue lamp-id true (* 20 hue/brightness-step))
+    :blue-heart (hue/set-light-state hue/hue lamp-id true 254 {:sat 254 :xy [0 0]})
+    :red-heart (hue/set-light-state hue/hue lamp-id true 254 {:sat 254 :xy [1 0]})
+    :green-heart (hue/set-light-state hue/hue lamp-id true 254 {:sat 254 :xy [0 1]})
+    :yellow-heart (hue/set-light-state hue/hue lamp-id true 254 {:sat 254 :xy [0.5 0.5]})
+    :purple-heart (hue/set-light-state hue/hue lamp-id true 254 {:sat 254 :xy [0.5 0.3]})
+    :flame (hue/set-light-state hue/hue lamp-id true 254 {:sat 254 :ct 400})
+    :snowflake (hue/set-light-state hue/hue lamp-id true 254 {:sat 254 :ct 153})
+    :droplet (hue/set-light-state hue/hue lamp-id true 254 {:sat 254 :ct 300})
     (do
       (swap! user-context
              #(assoc-in % [chat-id :last-button] nil))
       (light-listing-panel chat-id))))
+
+(:all-off command->button)
 
 (defn handle-generic-command [chat-id command]
   (if-let [lamp-id (get-lamp-id-from-button (:last-button (@user-context chat-id)))]
     (handle-device-command lamp-id chat-id command)
     (cond
       (= command "/start") (light-listing-panel chat-id)
+      (= command (:all-off command->button)) (doseq
+                                                 [i (get-active-device-ids)]
+                                               (hue/set-light-state hue/hue i false 1))
       ((get-active-device-ids) (get-lamp-id-from-button command))
       (do
-        (swap! user-context
-               #(assoc-in % [chat-id :last-button] (get-lamp-id-from-button command)))
-        (light-control-panel chat-id))
+        (let [lamp-id (get-lamp-id-from-button command)]
+          (swap! user-context
+                 #(assoc-in % [chat-id :last-button] lamp-id))
+          (light-control-panel chat-id (is-color-lamp? lamp-id))))
       :default (do (swap! user-context
                           #(assoc-in % [chat-id :last-button] nil))
                    (light-listing-panel chat-id)))))
