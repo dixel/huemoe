@@ -13,7 +13,7 @@
 
 (def message-buffer-size 100)
 
-(def default-polling-timeout 20000)
+(def default-polling-timeout 30000)
 
 (def elements-in-keyboard-row 4)
 
@@ -123,14 +123,14 @@
     (handle-device-command lamp-id chat-id command)
     (cond
       (= command (:all-off command->button)) (doseq
-                                                 [i (hue/get-active-device-ids)]
+                                                 [i (hue/get-active-device-ids hue/hue)]
                                                (hue/set-light-state hue/hue i false 1))
-      ((hue/get-active-device-ids) (get-lamp-id-from-button command))
+      ((hue/get-active-device-ids hue/hue) (get-lamp-id-from-button command))
       (do
         (let [lamp-id (get-lamp-id-from-button command)]
           (swap! user-context
                  #(assoc-in % [chat-id :last-button] lamp-id))
-          (light-control-panel chat-id (hue/is-color-lamp? lamp-id))))
+          (light-control-panel chat-id (hue/is-color-lamp? hue/hue lamp-id))))
       :default (do (swap! user-context
                           #(assoc-in % [chat-id :last-button] nil))
                    (light-listing-panel chat-id)))))
@@ -153,40 +153,40 @@
      :updates updates}))
 
 (defn polling-control [control-channel]
-  (let [{:keys [updates runner] :as initial-polling} (start-polling)
-        timeout (config :polling-timeout default-polling-timeout)]
-    (a/go-loop [polling initial-polling
+  (let [timeout (config :polling-timeout default-polling-timeout)]
+    (a/go-loop [polling (start-polling)
                 wait (a/timeout timeout)]
-      (a/alt!
-        updates ([r] (if-let [result r]
-                       (do
-                         (try
-                           (log/debugf "got message: %s" result)
-                           (message-dispatcher result)
-                           (catch Exception e
-                             (log/errorf "unable to process %s: %s" result e)))
-                         (a/close! wait)
-                         (recur polling (a/timeout timeout)))
-                       (do
-                         (log/errorf "updates channel is closed or the result is empty; restarting polling...")
-                         (polling/stop runner)
-                         (a/close! wait)
-                         (recur (start-polling) (a/timeout timeout)))))
-        runner (do
-                 (log/errorf "runner channel is closed, restarting polling...")
+      (let [{:keys [updates runner]} polling]
+        (a/alt!
+          updates ([r] (if-let [result r]
+                         (do
+                           (try
+                             (log/debugf "got message: %s" result)
+                             (message-dispatcher result)
+                             (catch Exception e
+                               (log/errorf "unable to process %s: %s" result e)))
+                           (a/close! wait)
+                           (recur polling (a/timeout timeout)))
+                         (do
+                           (log/errorf "updates channel is closed or the result is empty; restarting polling...")
+                           (polling/stop runner)
+                           (a/close! wait)
+                           (recur (start-polling) (a/timeout timeout)))))
+          runner (do
+                   (log/errorf "runner channel is closed, restarting polling...")
+                   (polling/stop runner)
+                   (recur (start-polling) (a/timeout timeout)))
+          wait (do
+                 (log/errorf "reached global timeout getting updates from telegram API, restarting polling process...")
                  (polling/stop runner)
                  (recur (start-polling) (a/timeout timeout)))
-        wait (do
-               (log/errorf "reached global timeout getting updates from telegram API, restarting polling process...")
-               (polling/stop runner)
-               (recur (start-polling) (a/timeout timeout)))
-        control-channel (do
-                          (log/errorf "got stop signal, terminating polling...")
-                          (a/close! wait)
-                          (polling/stop runner))))))
+          control-channel (do
+                            (log/errorf "got stop signal, terminating polling...")
+                            (a/close! wait)
+                            (polling/stop runner)))))))
 
 (mount/defstate bot
   :start (let [control-channel (a/chan)]
-           (polling-control-fn control-channel)
+           (polling-control control-channel)
            control-channel)
   :stop (a/close! bot))

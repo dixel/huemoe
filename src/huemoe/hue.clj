@@ -29,15 +29,15 @@
       :body
       (json/decode true)))
 
-(defn get-active-device-ids []
-  (->> (get-lights hue)
+(defn get-active-device-ids [state]
+  (->> (get-lights state)
        (filter #(-> % second :state :reachable))
        (map first)
        (map name)
        (into #{})))
 
-(defn is-color-lamp? [lamp-id]
-  (= (:type ((get-lights hue) (keyword lamp-id)))
+(defn is-color-lamp? [state lamp-id]
+  (= (:type ((get-lights state) (keyword lamp-id)))
      "Extended color light"))
 
 (defn set-light-state [state id light-state brightness & opts]
