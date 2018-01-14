@@ -7,10 +7,13 @@
             [huemoe.hue :as hue]
             [huemoe.telegram :as telegram]
             [morse.api :as api]
+            [morse.polling :as polling]
             [mount.core :as mount]
             [taoensso.timbre :as log]))
 
-(def message-buffer (a/chan 100))
+(def message-buffer-size 100)
+
+(def default-polling-timeout 20000)
 
 (def elements-in-keyboard-row 4)
 
@@ -37,26 +40,14 @@
    "💚" :green-heart
    "🔥" :flame
    "💧" :droplet
-   "❄️" :snowflake
-   })
+   "❄️" :snowflake})
 
 (def command->button
   (map-invert button->command))
 
-(defn get-lamp-id-from-button [button]
-  (when button
-    (first (str/split button #":"))))
-
-(defn get-active-device-ids []
-  (->> (hue/get-lights hue/hue)
-       (filter #(-> % second :state :reachable))
-       (map first)
-       (map name)
-       (into #{})))
-
-(defn is-color-lamp? [lamp-id]
-  (= (:type ((hue/get-lights hue/hue) (keyword lamp-id)))
-     "Extended color light"))
+(defn get-lamp-id-from-button [button-text]
+  (when button-text
+    (first (str/split button-text #":"))))
 
 (defn keyboard-reply [keyboard text chat-id]
   (api/send-text (config :telegram-token)
@@ -81,19 +72,13 @@
                         lamp-active
                         lamp-inactive)))
             devices-list)) [[all-off]])
-     "`.:hue control:.`" chat-id)))
+     "`.:hue devices:.`" chat-id)))
 
 (defn light-control-panel [chat-id colorful?]
-  (let [{:keys [lamp-on lamp-off
-                brightness-dec brightness-inc
-                brightness-1 brightness-2
-                brightness-3 brightness-4
-                brightness-5 back-menu
-                red-heart green-heart blue-heart
-                yellow-heart purple-heart
-                flame snowflake
-                all-off
-                droplet]} command->button
+  (let [{:keys [lamp-on lamp-off brightness-dec brightness-inc
+                brightness-1 brightness-2 brightness-3 brightness-4 brightness-5
+                back-menu red-heart green-heart blue-heart yellow-heart purple-heart
+                flame snowflake all-off droplet]} command->button
         keyboard [[lamp-on lamp-off]
                   [brightness-dec brightness-1
                    brightness-2 brightness-3
@@ -133,22 +118,19 @@
              #(assoc-in % [chat-id :last-button] nil))
       (light-listing-panel chat-id))))
 
-(:all-off command->button)
-
 (defn handle-generic-command [chat-id command]
   (if-let [lamp-id (get-lamp-id-from-button (:last-button (@user-context chat-id)))]
     (handle-device-command lamp-id chat-id command)
     (cond
-      (= command "/start") (light-listing-panel chat-id)
       (= command (:all-off command->button)) (doseq
-                                                 [i (get-active-device-ids)]
+                                                 [i (hue/get-active-device-ids)]
                                                (hue/set-light-state hue/hue i false 1))
-      ((get-active-device-ids) (get-lamp-id-from-button command))
+      ((hue/get-active-device-ids) (get-lamp-id-from-button command))
       (do
         (let [lamp-id (get-lamp-id-from-button command)]
           (swap! user-context
                  #(assoc-in % [chat-id :last-button] lamp-id))
-          (light-control-panel chat-id (is-color-lamp? lamp-id))))
+          (light-control-panel chat-id (hue/is-color-lamp? lamp-id))))
       :default (do (swap! user-context
                           #(assoc-in % [chat-id :last-button] nil))
                    (light-listing-panel chat-id)))))
@@ -160,16 +142,51 @@
     (when ((config :telegram-user-whitelist) user)
       (handle-generic-command chat-id text))))
 
+(defn start-polling
+  "Start telegram polling and return running/updates channels"
+  []
+  (let [updates (a/chan message-buffer-size)
+        runner (polling/start (config :telegram-token)
+                               (fn [message]
+                                 (a/go (a/>! updates message))))]
+    {:runner runner
+     :updates updates}))
+
+(defn polling-control [control-channel]
+  (let [{:keys [updates runner] :as initial-polling} (start-polling)
+        timeout (config :polling-timeout default-polling-timeout)]
+    (a/go-loop [polling initial-polling
+                wait (a/timeout timeout)]
+      (a/alt!
+        updates ([r] (if-let [result r]
+                       (do
+                         (try
+                           (log/debugf "got message: %s" result)
+                           (message-dispatcher result)
+                           (catch Exception e
+                             (log/errorf "unable to process %s: %s" result e)))
+                         (a/close! wait)
+                         (recur polling (a/timeout timeout)))
+                       (do
+                         (log/errorf "updates channel is closed or the result is empty; restarting polling...")
+                         (polling/stop runner)
+                         (a/close! wait)
+                         (recur (start-polling) (a/timeout timeout)))))
+        runner (do
+                 (log/errorf "runner channel is closed, restarting polling...")
+                 (polling/stop runner)
+                 (recur (start-polling) (a/timeout timeout)))
+        wait (do
+               (log/errorf "reached global timeout getting updates from telegram API, restarting polling process...")
+               (polling/stop runner)
+               (recur (start-polling) (a/timeout timeout)))
+        control-channel (do
+                          (log/errorf "got stop signal, terminating polling...")
+                          (a/close! wait)
+                          (polling/stop runner))))))
+
 (mount/defstate bot
-  :start (let [{:keys [updates] :as polling-state}
-               (telegram/start (config :telegram-token))]
-           (a/go-loop []
-             (if-let [message (a/<! updates)]
-               (try
-                 (log/debugf "got message: %s" message)
-                 (message-dispatcher message)
-                 (catch Exception e
-                   (log/errorf "unable to process %s: %s" message e))))
-             (recur))
-           polling-state)
-  :stop (a/>!! (:runner bot) :close))
+  :start (let [control-channel (a/chan)]
+           (polling-control-fn control-channel)
+           control-channel)
+  :stop (a/close! bot))

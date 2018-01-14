@@ -37,6 +37,8 @@ rsync target/huemoe-0.1.0-SNAPSHOT-standalone.jar raspi.local
 - Reducing the codebase by using the libraries for Hue as well;
 - Getting the feedback.
 
+[![Built with Spacemacs](https://cdn.rawgit.com/syl20bnr/spacemacs/442d025779da2f62fc86c2082703697714db6514/assets/spacemacs-badge.svg)](http://spacemacs.org)
+
 ## License
 
 Copyright © 2017 Avdiushkin Vasilii
