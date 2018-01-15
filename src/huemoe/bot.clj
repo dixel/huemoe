@@ -5,7 +5,6 @@
             [clojure.string :as str]
             [huemoe.config :refer [config]]
             [huemoe.hue :as hue]
-            [huemoe.telegram :as telegram]
             [morse.api :as api]
             [morse.polling :as polling]
             [mount.core :as mount]

@@ -4,5 +4,5 @@
             [clojure.tools.nrepl.server :as nrepl]))
 
 (mount/defstate nrepl
-  :start (nrepl/start-server :port (conf/config :nrepl-port))
+  :start (nrepl/start-server :port (read-string (str (conf/config :nrepl-port))))
   :stop (nrepl/stop-server nrepl))
