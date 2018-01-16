@@ -1,48 +1,24 @@
 (ns dixel.huemoe.bot
   (:require [cheshire.core :as json]
             [clojure.core.async :as a]
-            [clojure.set :refer [map-invert]]
             [clojure.string :as str]
-            [dixel.huemoe.config :refer [config]]
-            [dixel.huemoe.hue :as hue]
             [morse.api :as api]
             [morse.polling :as polling]
             [mount.core :as mount]
-            [taoensso.timbre :as log]))
+            [taoensso.timbre :as log]
+            [dixel.huemoe.config :refer [config]]
+            [dixel.huemoe.hue :as hue]
+            [dixel.huemoe.keyboards :refer [keyboards
+                                            button->command
+                                            command->button]]))
 
 (def message-buffer-size 100)
 
-(def default-polling-timeout 30000)
+(def default-polling-timeout 300000)
 
 (def elements-in-keyboard-row 4)
 
 (def user-context (atom {}))
-
-(def button->command
-  {"🌅 on" :lamp-on
-   "🌃 off" :lamp-off
-   "🌃 all off" :all-off
-   "🔅" :brightness-dec
-   "🔆" :brightness-inc
-   "1" :brightness-1
-   "2" :brightness-2
-   "3" :brightness-3
-   "4" :brightness-4
-   "5" :brightness-5
-   "🔙" :back-menu
-   "❌" :lamp-active
-   "💡" :lamp-inactive
-   "❤️" :red-heart
-   "💛" :yellow-heart
-   "💜" :purple-heart
-   "💙" :blue-heart
-   "💚" :green-heart
-   "🔥" :flame
-   "💧" :droplet
-   "❄️" :snowflake})
-
-(def command->button
-  (map-invert button->command))
 
 (defn get-lamp-id-from-button [button-text]
   (when button-text
@@ -74,24 +50,12 @@
      "`.:hue devices:.`" chat-id)))
 
 (defn light-control-panel [chat-id colorful?]
-  (let [{:keys [lamp-on lamp-off brightness-dec brightness-inc
-                brightness-1 brightness-2 brightness-3 brightness-4 brightness-5
-                back-menu red-heart green-heart blue-heart yellow-heart purple-heart
-                flame snowflake all-off droplet]} command->button
-        keyboard [[lamp-on lamp-off]
-                  [brightness-dec brightness-1
-                   brightness-2 brightness-3
-                   brightness-4 brightness-5 brightness-inc]]]
+  (let [{:keys [dimmable-light dimmable-color-light]} keyboards/keyboards]
     (keyboard-reply
-     (let [kb
-           (if colorful?
-             (-> keyboard
-                 (conj [snowflake droplet flame])
-                 (conj [red-heart yellow-heart green-heart
-                        blue-heart purple-heart]))
-             keyboard)]
-       (conj kb [back-menu]))
-     "`.:dimmed lamp control:.`" chat-id)))
+     (if colorful?
+       dimmable-color-light
+       dimmable-light)
+     "`.:dimmable lamp control:.`" chat-id)))
 
 (defn handle-device-command [lamp-id chat-id button]
   (case (button->command button)
@@ -180,7 +144,7 @@
                  (polling/stop runner)
                  (recur (start-polling) (a/timeout timeout)))
           control-channel (do
-                            (log/errorf "got stop signal, terminating polling...")
+                            (log/info "got stop signal, terminating polling...")
                             (a/close! wait)
                             (polling/stop runner)))))))
 
