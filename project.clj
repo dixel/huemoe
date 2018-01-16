@@ -5,7 +5,7 @@
   :uberjar-name "huemoe.jar"
   :profiles {:uberjar
              {:aot :all}}
-  :dependencies [[org.clojure/clojure "1.8.0"]
+  :dependencies [[org.clojure/clojure "1.9.0"]
                  [ring/ring-core "1.6.3"]
                  [cheshire "5.8.0"]
                  [clj-http "3.7.0"]
