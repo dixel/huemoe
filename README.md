@@ -1,6 +1,9 @@
 # huemoe
 💡 Telegram bot to control your Philips Hue -based smart devices 💡
 
+[![CircleCI](https://circleci.com/gh/dixel/huemoe.svg?style=svg)](https://circleci.com/gh/dixel/huemoe)
+[![Built with Spacemacs](https://cdn.rawgit.com/syl20bnr/spacemacs/442d025779da2f62fc86c2082703697714db6514/assets/spacemacs-badge.svg)](http://spacemacs.org)
+
 ![](./pic/screenshot.png)
 
 ## Motivation
@@ -31,7 +34,6 @@ lein uberjar
 rsync target/huemoe-0.1.0-SNAPSHOT-standalone.jar
 ```
 
-[![Built with Spacemacs](https://cdn.rawgit.com/syl20bnr/spacemacs/442d025779da2f62fc86c2082703697714db6514/assets/spacemacs-badge.svg)](http://spacemacs.org)
 
 ## License
 
