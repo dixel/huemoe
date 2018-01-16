@@ -1,4 +1,4 @@
-(defproject huemoe "0.1.0-SNAPSHOT"
+(defproject huemoe "0.0.4"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :main dixel.huemoe.core
