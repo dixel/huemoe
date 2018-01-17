@@ -4,7 +4,9 @@
 [![CircleCI](https://circleci.com/gh/dixel/huemoe.svg?style=svg)](https://circleci.com/gh/dixel/huemoe)
 [![Built with Spacemacs](https://cdn.rawgit.com/syl20bnr/spacemacs/442d025779da2f62fc86c2082703697714db6514/assets/spacemacs-badge.svg)](http://spacemacs.org)
 
-![](./pic/screenshot.png)
+![](./pic/1.png)
+![](./pic/2.png)
+![](./pic/3.png)
 
 ## Usage
 
