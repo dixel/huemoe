@@ -19,7 +19,7 @@ docker run -d \
     -e HUE_HOST=<IP address of your Hue bridge> \
     -e HUE_TOKEN=<Hue developer token> \
     -e TELEGRAM_USER_WHITELIST=<Comma-separated list of allowed telegram users> \
-    -e TELEGRAM_TOKEN=<Telegram developer token>
+    -e TELEGRAM_TOKEN=<Telegram developer token> \
     dixel/huemoe:0.0.4.3
 ```
 

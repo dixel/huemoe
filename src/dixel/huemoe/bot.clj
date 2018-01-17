@@ -6,7 +6,8 @@
             [morse.polling :as polling]
             [mount.core :as mount]
             [taoensso.timbre :as log]
-            [dixel.huemoe.config :refer [config]]
+            [cyrus-config.core :as cfg]
+            [clojure.spec.alpha :as s]
             [dixel.huemoe.hue :as hue]
             [dixel.huemoe.keyboards :refer [keyboards
                                             button->command
@@ -14,18 +15,30 @@
 
 (def message-buffer-size 100)
 
-(def default-polling-timeout 300000)
-
 (def elements-in-keyboard-row 4)
 
 (def user-context (atom {}))
+
+(cfg/def telegram-token "Telegram developer token"
+  {:spec string?
+   :secret true
+   :required true})
+
+(cfg/def telegram-user-whitelist "Comma separated list of telegram users allowed to use this bot"
+  {:spec string?
+   :required true})
+
+(cfg/def polling-timeout "Timeout before restarting the telegram polling process"
+  {:spec int?
+   :required false
+   :default 300000})
 
 (defn get-lamp-id-from-button [button-text]
   (when button-text
     (first (str/split button-text #":"))))
 
 (defn keyboard-reply [keyboard text chat-id]
-  (api/send-text (config :telegram-token)
+  (api/send-text telegram-token
                  chat-id
                  {:parse_mode "Markdown"
                   :reply_markup (json/encode {:keyboard keyboard})} text))
@@ -50,14 +63,16 @@
      "`.:hue devices:.`" chat-id)))
 
 (defn light-control-panel [chat-id colorful?]
-  (let [{:keys [dimmable-light dimmable-color-light]} keyboards/keyboards]
+  (let [{:keys [dimmable-light dimmable-color-light]} keyboards]
     (keyboard-reply
      (if colorful?
        dimmable-color-light
        dimmable-light)
      "`.:dimmable lamp control:.`" chat-id)))
 
-(defn handle-device-command [lamp-id chat-id button]
+(defn handle-device-command
+  "Handcrafted set of commands for hue lamps settings based on emojis"
+  [lamp-id chat-id button]
   (case (button->command button)
     :lamp-on (hue/set-light-state hue/hue lamp-id true hue/max-brightness)
     :lamp-off (hue/set-light-state hue/hue lamp-id false hue/min-brightness)
@@ -101,52 +116,52 @@
 (defn message-dispatcher [message]
   (let [chat-id (-> message :message :chat :id)
         text (-> message :message :text)
-        user (-> message :message :from :username)]
-    (when ((config :telegram-user-whitelist) user)
+        user (-> message :message :from :username)
+        user-whitelist (into #{} (str/split telegram-user-whitelist #","))]
+    (when (user-whitelist user)
       (handle-generic-command chat-id text))))
 
 (defn start-polling
   "Start telegram polling and return running/updates channels"
   []
   (let [updates (a/chan message-buffer-size)
-        runner (polling/start (config :telegram-token)
+        runner (polling/start telegram-token
                                (fn [message]
                                  (a/go (a/>! updates message))))]
     {:runner runner
      :updates updates}))
 
 (defn polling-control [control-channel]
-  (let [timeout (config :polling-timeout default-polling-timeout)]
-    (a/go-loop [polling (start-polling)
-                wait (a/timeout timeout)]
-      (let [{:keys [updates runner]} polling]
-        (a/alt!
-          updates ([r] (if-let [result r]
-                         (do
-                           (try
-                             (log/debugf "got message: %s" result)
-                             (message-dispatcher result)
-                             (catch Exception e
-                               (log/errorf "unable to process %s: %s" result e)))
-                           (a/close! wait)
-                           (recur polling (a/timeout timeout)))
-                         (do
-                           (log/errorf "updates channel is closed or the result is empty; restarting polling...")
-                           (polling/stop runner)
-                           (a/close! wait)
-                           (recur (start-polling) (a/timeout timeout)))))
-          runner (do
-                   (log/errorf "runner channel is closed, restarting polling...")
-                   (polling/stop runner)
-                   (recur (start-polling) (a/timeout timeout)))
-          wait (do
-                 (log/errorf "reached global timeout getting updates from telegram API, restarting polling process...")
+  (a/go-loop [polling (start-polling)
+              wait (a/timeout polling-timeout)]
+    (let [{:keys [updates runner]} polling]
+      (a/alt!
+        updates ([r] (if-let [result r]
+                       (do
+                         (try
+                           (log/debugf "got message: %s" result)
+                           (message-dispatcher result)
+                           (catch Exception e
+                             (log/errorf "unable to process %s: %s" result e)))
+                         (a/close! wait)
+                         (recur polling (a/timeout polling-timeout)))
+                       (do
+                         (log/error "updates channel is closed or the result is empty; restarting polling...")
+                         (polling/stop runner)
+                         (a/close! wait)
+                         (recur (start-polling) (a/timeout polling-timeout)))))
+        runner (do
+                 (log/error "runner channel is closed, restarting polling...")
                  (polling/stop runner)
-                 (recur (start-polling) (a/timeout timeout)))
-          control-channel (do
-                            (log/info "got stop signal, terminating polling...")
-                            (a/close! wait)
-                            (polling/stop runner)))))))
+                 (recur (start-polling) (a/timeout polling-timeout)))
+        wait (do
+               (log/error "reached global timeout getting updates from telegram API, restarting polling process...")
+               (polling/stop runner)
+               (recur (start-polling) (a/timeout polling-timeout)))
+        control-channel (do
+                          (log/info "got stop signal, terminating polling...")
+                          (a/close! wait)
+                          (polling/stop runner))))))
 
 (mount/defstate bot
   :start (let [control-channel (a/chan)]

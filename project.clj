@@ -15,4 +15,5 @@
                  [com.fzakaria/slf4j-timbre "0.3.7"]
                  [morse "0.3.1"]
                  [org.clojure/core.async "0.3.465"]
-                 [org.clojure/tools.nrepl "0.2.12"]])
+                 [org.clojure/tools.nrepl "0.2.12"]
+                 [cyrus/config "0.2.1"]])

@@ -1,15 +1,24 @@
 (ns dixel.huemoe.hue
   (:require [cheshire.core :as json]
             [clj-http.client :as http]
-            [dixel.huemoe.config :refer [config]]
             [mount.core :as mount]
-            [taoensso.timbre :as log]))
+            [taoensso.timbre :as log]
+            [cyrus-config.core :as cfg]))
 
 (def max-brightness 254)
 
 (def min-brightness 1)
 
 (def brightness-step 10)
+
+(cfg/def hue-host "IP address of the Hue Bridge"
+  {:spec string?
+   :required true})
+
+(cfg/def hue-token "Developer token for Hue"
+  {:spec string?
+   :secret true
+   :required true})
 
 (defn get-user-token [state username device]
   (let [response
@@ -70,5 +79,5 @@
                          new-bri)))))
 
 (mount/defstate hue
-  :start {:token (config :hue-token)
-          :base-url (format "http://%s/api" (config :hue-host))})
+  :start {:token hue-token
+          :base-url (format "http://%s/api" hue-host)})
