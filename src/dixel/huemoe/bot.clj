@@ -70,27 +70,31 @@
        dimmable-light)
      "`.:dimmable lamp control:.`" chat-id)))
 
+(defn light-color-fine-control [chat-id]
+  :pass)
+
 (defn handle-device-command
   "Handcrafted set of commands for hue lamps settings based on emojis"
   [lamp-id chat-id button]
   (case (button->command button)
-    :lamp-on (hue/set-light-state hue/hue lamp-id true hue/max-brightness)
-    :lamp-off (hue/set-light-state hue/hue lamp-id false hue/min-brightness)
+    :lamp-on (hue/set-brightness hue/hue lamp-id hue/max-brightness)
+    :lamp-off (hue/set-brightness hue/hue lamp-id 0)
     :brightness-inc (hue/increase hue/hue lamp-id)
     :brightness-dec (hue/decrease hue/hue lamp-id)
-    :brightness-1 (hue/set-light-state hue/hue lamp-id true hue/min-brightness)
-    :brightness-2 (hue/set-light-state hue/hue lamp-id true (* 5 hue/brightness-step))
-    :brightness-3 (hue/set-light-state hue/hue lamp-id true (* 10 hue/brightness-step))
-    :brightness-4 (hue/set-light-state hue/hue lamp-id true (* 15 hue/brightness-step))
-    :brightness-5 (hue/set-light-state hue/hue lamp-id true (* 20 hue/brightness-step))
-    :blue-heart (hue/set-light-state hue/hue lamp-id true 254 {:sat 254 :xy [0 0]})
-    :red-heart (hue/set-light-state hue/hue lamp-id true 254 {:sat 254 :xy [1 0]})
-    :green-heart (hue/set-light-state hue/hue lamp-id true 254 {:sat 254 :xy [0 1]})
-    :yellow-heart (hue/set-light-state hue/hue lamp-id true 254 {:sat 254 :xy [0.5 0.5]})
-    :purple-heart (hue/set-light-state hue/hue lamp-id true 254 {:sat 254 :xy [0.5 0.3]})
-    :flame (hue/set-light-state hue/hue lamp-id true 254 {:sat 254 :ct 400})
-    :snowflake (hue/set-light-state hue/hue lamp-id true 254 {:sat 254 :ct 153})
-    :droplet (hue/set-light-state hue/hue lamp-id true 254 {:sat 254 :ct 300})
+    :brightness-1 (hue/set-brightness hue/hue lamp-id hue/min-brightness)
+    :brightness-2 (hue/set-brightness hue/hue lamp-id (* 5 hue/brightness-step))
+    :brightness-3 (hue/set-brightness hue/hue lamp-id (* 10 hue/brightness-step))
+    :brightness-4 (hue/set-brightness hue/hue lamp-id (* 15 hue/brightness-step))
+    :brightness-5 (hue/set-brightness hue/hue lamp-id (* 20 hue/brightness-step))
+    :blue-heart (hue/set-light-state hue/hue lamp-id {:sat 254 :xy [0 0]})
+    :red-heart (hue/set-light-state hue/hue lamp-id {:sat 254 :xy [1 0]})
+    :green-heart (hue/set-light-state hue/hue lamp-id {:sat 254 :xy [0 1]})
+    :yellow-heart (hue/set-light-state hue/hue lamp-id {:sat 254 :xy [0.5 0.5]})
+    :purple-heart (hue/set-light-state hue/hue lamp-id {:sat 254 :xy [0.5 0.3]})
+    :flame (hue/set-light-state hue/hue lamp-id {:sat 254 :ct 400})
+    :snowflake (hue/set-light-state hue/hue lamp-id {:sat 254 :ct 153})
+    :droplet (hue/set-light-state hue/hue lamp-id {:sat 254 :ct 300})
+    :gear (light-color-fine-control chat-id)
     (do
       (swap! user-context
              #(assoc-in % [chat-id :last-button] nil))
@@ -102,7 +106,7 @@
     (cond
       (= command (:all-off command->button)) (doseq
                                                  [i (hue/get-active-device-ids hue/hue)]
-                                               (hue/set-light-state hue/hue i false 1))
+                                               (hue/set-light-state hue/hue i 0))
       ((hue/get-active-device-ids hue/hue) (get-lamp-id-from-button command))
       (do
         (let [lamp-id (get-lamp-id-from-button command)]
@@ -126,8 +130,8 @@
   []
   (let [updates (a/chan message-buffer-size)
         runner (polling/start telegram-token
-                               (fn [message]
-                                 (a/go (a/>! updates message))))]
+                              (fn [message]
+                                (a/go (a/>! updates message))))]
     {:runner runner
      :updates updates}))
 

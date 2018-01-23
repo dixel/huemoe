@@ -20,6 +20,7 @@
    "💜" :purple-heart
    "💙" :blue-heart
    "💚" :green-heart
+   "⚙️" :gear
    "🔥" :flame
    "💧" :droplet
    "❄️" :snowflake})
@@ -36,7 +37,7 @@
                 back-menu
                 red-heart green-heart
                 blue-heart yellow-heart
-                purple-heart
+                purple-heart gear
                 flame snowflake
                 droplet
                 all-off]} command->button]
@@ -52,5 +53,5 @@
                              brightness-4 brightness-5 brightness-inc]
                             [snowflake droplet flame]
                             [red-heart yellow-heart green-heart
-                             blue-heart purple-heart]
+                             blue-heart purple-heart gear]
                             [back-menu]]}))
