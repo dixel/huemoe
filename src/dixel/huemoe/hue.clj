@@ -22,9 +22,10 @@
 
 (defn get-user-token [state username device]
   (let [response
-        (-> (http/post (state :base-url) {:body
-                                          (-> {:devicetype (str username ":" device)}
-                                              (json/encode))})
+        (-> (http/post (state :base-url)
+                       {:body
+                        (-> {:devicetype (str username ":" device)}
+                            (json/encode))})
             :body
             (json/decode true))]
     (case (-> response first :error :type)
@@ -69,6 +70,24 @@
                                (get-in [(keyword id)
                                         :state]))]
     (set-brightness state id (- (:bri current-lamp-state) brightness-step))))
+
+(defn rgb-to-xy
+  "as defined in https://github.com/PhilipsHue/PhilipsHueSDK-iOS-OSX/blob/00187a3db88dedd640f5ddfa8a474458dff4e1db/ApplicationDesignNotes/RGB%20to%20xy%20Color%20conversion.md"
+  [r g b]
+  (let [r (/ r 255.0)
+        g (/ g 255.0)
+        b (/ b 255.0)
+        xf (+ (* r 0.649926)
+              (* g 0.103455)
+              (* b 0.197109))
+        yf (+ (* r 0.234327)
+              (* g 0.743075)
+              (* b 0.022598))
+        zf (+ (* g 0.053077)
+              (* b 1.035763))
+        x (/ xf (+ xf yf zf))
+        y (/ yf (+ xf yf zf))]
+    [x y]))
 
 (mount/defstate hue
   :start {:token hue-token
