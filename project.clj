@@ -16,4 +16,5 @@
                  [morse "0.3.1"]
                  [org.clojure/core.async "0.3.465"]
                  [org.clojure/tools.nrepl "0.2.12"]
-                 [cyrus/config "0.2.1"]])
+                 [cyrus/config "0.2.1"]
+                 [org.clojure/math.numeric-tower "0.0.4"]])

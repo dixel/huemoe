@@ -3,7 +3,8 @@
             [clj-http.client :as http]
             [mount.core :as mount]
             [taoensso.timbre :as log]
-            [cyrus-config.core :as cfg]))
+            [cyrus-config.core :as cfg]
+            [dixel.huemoe.colors :as colors]))
 
 (def max-brightness 254)
 
@@ -59,35 +60,23 @@
   (set-light-state state id {:on (if (> brightness 0) true false)
                              :bri brightness}))
 
+(defn get-lamp-state [state id]
+  (-> (get-lights state)
+      (get-in [(keyword id)
+               :state])))
+
 (defn increase [state id]
-  (let [current-lamp-state (-> (get-lights state)
-                               (get-in [(keyword id)
-                                        :state]))]
+  (let [current-lamp-state (get-lamp-state state id)]
     (set-brightness state id (+ brightness-step (:bri current-lamp-state)))))
 
 (defn decrease [state id]
-  (let [current-lamp-state (-> (get-lights state)
-                               (get-in [(keyword id)
-                                        :state]))]
+  (let [current-lamp-state (get-lamp-state state id)]
     (set-brightness state id (- (:bri current-lamp-state) brightness-step))))
 
-(defn rgb-to-xy
-  "as defined in https://github.com/PhilipsHue/PhilipsHueSDK-iOS-OSX/blob/00187a3db88dedd640f5ddfa8a474458dff4e1db/ApplicationDesignNotes/RGB%20to%20xy%20Color%20conversion.md"
-  [r g b]
-  (let [r (/ r 255.0)
-        g (/ g 255.0)
-        b (/ b 255.0)
-        xf (+ (* r 0.649926)
-              (* g 0.103455)
-              (* b 0.197109))
-        yf (+ (* r 0.234327)
-              (* g 0.743075)
-              (* b 0.022598))
-        zf (+ (* g 0.053077)
-              (* b 1.035763))
-        x (/ xf (+ xf yf zf))
-        y (/ yf (+ xf yf zf))]
-    [x y]))
+(defn set-color-rgb
+  [state id rgb]
+  (let [[x y bri] (colors/rgb->xy rgb)]
+    (set-light-state state id {:xy [x y] :bri bri})))
 
 (mount/defstate hue
   :start {:token hue-token
