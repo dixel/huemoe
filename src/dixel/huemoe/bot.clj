@@ -31,7 +31,7 @@
 (cfg/def polling-timeout "Timeout before restarting the telegram polling process"
   {:spec int?
    :required false
-   :default 300000})
+   :default 5})
 
 (defn get-lamp-id-from-button [button-text]
   (when button-text
