@@ -104,9 +104,9 @@
   (if-let [lamp-id (get-lamp-id-from-button (:last-button (@user-context chat-id)))]
     (handle-device-command lamp-id chat-id command)
     (cond
-      (= command (:all-off command->button)) (doseq
-                                                 [i (hue/get-active-device-ids hue/hue)]
-                                               (hue/set-light-state hue/hue i 0))
+      (= command (:all-off command->button))
+      (doseq [i (hue/get-active-device-ids hue/hue)]
+        (hue/set-brightness hue/hue i 0))
       ((hue/get-active-device-ids hue/hue) (get-lamp-id-from-button command))
       (do
         (let [lamp-id (get-lamp-id-from-button command)]
@@ -131,13 +131,13 @@
   (let [updates (a/chan message-buffer-size)
         runner (polling/start telegram-token
                               (fn [message]
-                                (a/go (a/>! updates message))))]
+                                (a/go (a/>! updates message)))
+                              {:timeout polling-timeout})]
     {:runner runner
      :updates updates}))
 
 (defn polling-control [control-channel]
-  (a/go-loop [polling (start-polling)
-              wait (a/timeout polling-timeout)]
+  (a/go-loop [polling (start-polling)]
     (let [{:keys [updates runner]} polling]
       (a/alt!
         updates ([r] (if-let [result r]
@@ -147,24 +147,17 @@
                            (message-dispatcher result)
                            (catch Exception e
                              (log/errorf "unable to process %s: %s" result e)))
-                         (a/close! wait)
-                         (recur polling (a/timeout polling-timeout)))
+                         (recur polling))
                        (do
                          (log/error "updates channel is closed or the result is empty; restarting polling...")
                          (polling/stop runner)
-                         (a/close! wait)
-                         (recur (start-polling) (a/timeout polling-timeout)))))
+                         (recur (start-polling)))))
         runner (do
                  (log/error "runner channel is closed, restarting polling...")
                  (polling/stop runner)
-                 (recur (start-polling) (a/timeout polling-timeout)))
-        wait (do
-               (log/error "reached global timeout getting updates from telegram API, restarting polling process...")
-               (polling/stop runner)
-               (recur (start-polling) (a/timeout polling-timeout)))
+                 (recur (start-polling)))
         control-channel (do
                           (log/info "got stop signal, terminating polling...")
-                          (a/close! wait)
                           (polling/stop runner))))))
 
 (mount/defstate bot
