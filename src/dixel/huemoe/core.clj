@@ -2,11 +2,11 @@
   (:gen-class)
   (:require [cheshire.core :as json]
             [clj-http.client :as http]
-            [mount.core :as mount]
             [cyrus-config.core :as cfg]
-            [taoensso.timbre :as log]
-            [dixel.huemoe.bot :as bot]
-            [dixel.huemoe.nrepl :as nrepl]))
+            [dixel.huemoe.bot-test :as bot]
+            [dixel.huemoe.nrepl :as nrepl]
+            [mount.core :as mount]
+            [taoensso.timbre :as log]))
 
 (defn -main [& args]
   (cfg/validate!)

@@ -136,32 +136,35 @@
     {:runner runner
      :updates updates}))
 
-(defn polling-control [control-channel]
-  (a/go-loop [polling (start-polling)]
+(defn polling-control [control-channel
+                       start-polling-fn
+                       message-dispatcher-fn]
+  (a/go-loop [polling (start-polling-fn)]
     (let [{:keys [updates runner]} polling]
       (a/alt!
-        updates ([r] (if-let [result r]
-                       (do
-                         (try
-                           (log/debugf "got message: %s" result)
-                           (message-dispatcher result)
-                           (catch Exception e
-                             (log/errorf "unable to process %s: %s" result e)))
-                         (recur polling))
-                       (do
-                         (log/error "updates channel is closed or the result is empty; restarting polling...")
-                         (polling/stop runner)
-                         (recur (start-polling)))))
+        updates ([r]
+                 (if-let [result r]
+                   (do
+                     (try
+                       (log/debugf "got message: %s" result)
+                       (message-dispatcher-fn result)
+                       (catch Exception e
+                         (log/errorf "unable to process %s: %s" result e)))
+                     (recur polling))
+                   (do
+                     (log/error "updates channel is closed or result is empty; restarting polling...")
+                     (polling/stop runner)
+                     (recur (start-polling-fn)))))
         runner (do
                  (log/error "runner channel is closed, restarting polling...")
                  (polling/stop runner)
-                 (recur (start-polling)))
+                 (recur (start-polling-fn)))
         control-channel (do
                           (log/info "got stop signal, terminating polling...")
                           (polling/stop runner))))))
 
 (mount/defstate bot
   :start (let [control-channel (a/chan)]
-           (polling-control control-channel)
+           (polling-control control-channel start-polling message-dispatcher)
            control-channel)
   :stop (a/close! bot))
