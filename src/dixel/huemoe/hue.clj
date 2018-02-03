@@ -78,6 +78,11 @@
   (let [[x y bri] (colors/rgb->xy rgb)]
     (set-light-state state id {:xy [x y] :bri bri})))
 
+(defn switch-off-everything
+  [state]
+  (doseq [i (get-active-device-ids state)]
+    (set-brightness state i 0)))
+
 (mount/defstate hue
   :start {:token hue-token
           :base-url (format "http://%s/api" hue-host)})

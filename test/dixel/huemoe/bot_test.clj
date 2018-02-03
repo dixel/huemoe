@@ -35,23 +35,19 @@
   (cfg/reload-with-override! {"TELEGRAM_USER_WHITELIST" "root,admin"})
 
   (let [text-atom (atom {})]
-    (with-redefs [sut/handle-generic-command
-                  (fn [chat-id text]
-                    (swap! text-atom #(assoc % chat-id text)))]
+    (testing "allowed users should be able to perform commands with bot"
+      (let [message {:message
+                     {:text "I am root"
+                      :chat {:id 0}
+                      :from {:username "root"}}}]
+        (is (= message (sut/wrap-user-whitelist message)))))
 
-      (testing "allowed users should be able to perform commands with bot"
-        (sut/message-dispatcher {:message
-                                 {:text "I am root"
-                                  :chat {:id 0}
-                                  :from {:username "root"}}})
-        (is (= "I am root" (get @text-atom 0))))
-
-      (testing "users not in whitelist shouldn't get handled"
-        (sut/message-dispatcher {:message
-                                 {:text "I am root"
-                                  :chat {:id 1}
-                                  :from {:username "but-not-really"}}})
-        (is (= nil (get @text-atom 1)))))))
+    (testing "users not in whitelist shouldn't get handled"
+      (let [message {:message
+                     {:text "I am root"
+                      :chat {:id 1}
+                      :from {:username "but-not-really"}}}]
+        (is (= nil (sut/wrap-user-whitelist message)))))))
 
 (deftest all-lights-off-test
   (let [lamps #{"1" "2" "3"}
@@ -64,6 +60,6 @@
                                          (swap! lamps-state
                                                 (fn [ls]
                                                   (assoc ls lamp 0))))]
-      (sut/handle-generic-command 0 (kbd/command->button :all-off))
+      (sut/wrap-hue-action {:message {:text (kbd/command->button :all-off)}})
       (doseq [[id bri] @lamps-state]
         (is (= 0 bri))))))

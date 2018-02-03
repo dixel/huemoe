@@ -34,8 +34,12 @@
    :default 5})
 
 (defn get-lamp-id-from-button [button-text]
-  (when button-text
+  (when (and button-text (str/includes? button-text ":"))
     (first (str/split button-text #":"))))
+
+(defn is-context-switch? [text]
+  (when (get-lamp-id-from-button text)
+    true))
 
 (defn keyboard-reply [keyboard text chat-id]
   (api/send-text telegram-token
@@ -95,35 +99,50 @@
     :snowflake (hue/set-light-state hue/hue lamp-id {:ct 153 :on true})
     :droplet (hue/set-light-state hue/hue lamp-id {:ct 300 :on true})
     :gear (light-color-fine-control chat-id)
-    (do
-      (swap! user-context
-             #(assoc-in % [chat-id :last-button] nil))
-      (light-listing-panel chat-id))))
+    :pass))
 
-(defn handle-generic-command [chat-id command]
-  (if-let [lamp-id (get-lamp-id-from-button (:last-button (@user-context chat-id)))]
-    (handle-device-command lamp-id chat-id command)
-    (cond
-      (= command (:all-off command->button))
-      (doseq [i (hue/get-active-device-ids hue/hue)]
-        (hue/set-brightness hue/hue i 0))
-      ((hue/get-active-device-ids hue/hue) (get-lamp-id-from-button command))
-      (do
-        (let [lamp-id (get-lamp-id-from-button command)]
-          (swap! user-context
-                 #(assoc-in % [chat-id :last-button] lamp-id))
-          (light-control-panel chat-id (hue/is-color-lamp? hue/hue lamp-id))))
-      :default (do (swap! user-context
-                          #(assoc-in % [chat-id :last-button] nil))
-                   (light-listing-panel chat-id)))))
-
-(defn message-dispatcher [message]
+(defn wrap-user-whitelist [message]
   (let [chat-id (-> message :message :chat :id)
         text (-> message :message :text)
         user (-> message :message :from :username)
         user-whitelist (into #{} (str/split telegram-user-whitelist #","))]
     (when (user-whitelist user)
-      (handle-generic-command chat-id text))))
+      message)))
+
+(defn wrap-chat-context [message]
+  (let [chat-id (-> message :message :chat :id)
+        text (-> message :message :text)
+        context (@user-context chat-id)]
+    (log/debugf "context is : %s" context)
+    (swap! user-context
+           (fn [ctx]
+             (if (is-context-switch? text)
+               (assoc-in ctx [chat-id :last-button] text)
+               ctx)))
+    (assoc message :chat-context context)))
+
+(defn wrap-hue-action [message]
+  (let [command (-> message :message :text)
+        chat-id (-> message :message :chat :id)
+        last-button (-> message :chat-context :last-button)
+        last-lamp-id (get-lamp-id-from-button last-button)
+        current-lamp-id (get-lamp-id-from-button command)]
+    (cond
+      (= command (:all-off command->button)) (hue/switch-off-everything hue/hue)
+      (= command (command->button :back-menu)) (light-listing-panel chat-id)
+      ((hue/get-active-device-ids hue/hue) current-lamp-id) (light-control-panel
+                                                             chat-id
+                                                             (hue/is-color-lamp?
+                                                              hue/hue
+                                                              current-lamp-id))
+      last-lamp-id (handle-device-command last-lamp-id chat-id command)
+      :else (light-listing-panel chat-id))))
+
+(defn message-dispatcher [message]
+  (some-> message
+          wrap-user-whitelist
+          wrap-chat-context
+          wrap-hue-action))
 
 (defn start-polling
   "Start telegram polling and return running/updates channels"
