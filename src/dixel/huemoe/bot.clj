@@ -106,6 +106,7 @@
         text (-> message :message :text)
         user (-> message :message :from :username)
         user-whitelist (into #{} (str/split telegram-user-whitelist #","))]
+    (log/debugf "checking user [%s] for [%s]" user user-whitelist)
     (when (user-whitelist user)
       message)))
 
