@@ -13,7 +13,7 @@
                  [environ "1.1.0"]
                  [com.taoensso/timbre "4.10.0"]
                  [com.fzakaria/slf4j-timbre "0.3.7"]
-                 [morse "0.3.4"]
+                 [morse "0.4.0"]
                  [org.clojure/core.async "0.3.465"]
                  [org.clojure/tools.nrepl "0.2.12"]
                  [cyrus/config "0.2.1"]

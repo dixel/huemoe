@@ -3,7 +3,7 @@
   (:require [cheshire.core :as json]
             [clj-http.client :as http]
             [cyrus-config.core :as cfg]
-            [dixel.huemoe.bot-test :as bot]
+            [dixel.huemoe.bot :as bot]
             [dixel.huemoe.nrepl :as nrepl]
             [mount.core :as mount]
             [taoensso.timbre :as log]))
