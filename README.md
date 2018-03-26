@@ -22,7 +22,7 @@ docker run -d \
     -e HUE_TOKEN=<Hue developer token> \
     -e TELEGRAM_USER_WHITELIST=<Comma-separated list of allowed telegram users> \
     -e TELEGRAM_TOKEN=<Telegram developer token> \
-    dixel/huemoe:0.0.4.3
+    dixel/huemoe:0.0.8.16
 ```
 
 ## Motivation
